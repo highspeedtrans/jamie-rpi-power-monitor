@@ -27,17 +27,17 @@ class Point():
             self.current = kwargs['current']
             self.p_type  = p_type
             self.time    = kwargs['time']
-        
+
         elif p_type == 'solar':
             self.power   = kwargs['power']
             self.current = kwargs['current']
             self.pf      = kwargs['pf']
-            self.p_type  = p_type    
-            self.time    = kwargs['time']        
-            
-        elif p_type == 'net': 
+            self.p_type  = p_type
+            self.time    = kwargs['time']
+
+        elif p_type == 'net':
             '''
-            This type represents the current net power situation at the time of sampling. 
+            This type represents the current net power situation at the time of sampling.
             self.power   : the real net power
             self.current : the rms current as measured
             self.p_type  : the type of point [home_load, solar, net, ct, voltage]
@@ -45,9 +45,9 @@ class Point():
             '''
             self.power   = kwargs['power']
             self.current = kwargs['current']
-            self.p_type  = p_type            
+            self.p_type  = p_type
             self.time    = kwargs['time']
-        
+
         elif p_type == 'ct':
             '''
             This type represents a CT reading.
@@ -59,14 +59,14 @@ class Point():
             '''
             self.power   = kwargs['power']
             self.current = kwargs['current']
-            self.p_type  = p_type            
+            self.p_type  = p_type
             self.pf      = kwargs['pf']
             self.ct_num  = kwargs['num']
             self.time    = kwargs['time']
 
         elif p_type == 'voltage':
             '''
-            This type represents a voltage reading. 
+            This type represents a voltage reading.
             The self.voltage is self explanatory.
             The v_input represents the identifier of the voltage input. This is setting up for multiple voltage inputs in the future.
             '''
@@ -74,7 +74,7 @@ class Point():
             self.v_input = kwargs['v_input']
             self.time    = kwargs['time']
             self.p_type  = p_type
- 
+
 
     def to_dict(self):
         if self.p_type == 'home_load':
@@ -86,7 +86,7 @@ class Point():
                 },
                 "time" : self.time
             }
-        elif self.p_type == 'solar': 
+        elif self.p_type == 'solar':
             data = {
                 "measurement" : "solar",
                 "fields" : {
@@ -152,21 +152,21 @@ def init_db():
     except ConnectionRefusedError:
         logger.debug("Could not connect to InfluxDB")
         return False
-    
+
     except Exception:
         logger.debug(f"Could not connect to {db_settings['host']}:{db_settings['port']}")
         return False
-        
-        
-    
-    
+
+
+
+
 
 
 def close_db():
     client.close()
 
-def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_dict, ct2_dict, ct3_dict, ct4_dict, ct5_dict, ct6_dict, poll_time, length, voltages):
-    
+def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_dict, ct2_dict, ct3_dict, ct4_dict, ct5_dict, poll_time, length, ac_voltages, dc_voltages):
+
     # Calculate Averages
     avg_solar_power = sum(solar_power_values['power']) / length
     avg_solar_current = sum(solar_power_values['current']) / length
@@ -190,10 +190,8 @@ def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_
     ct5_avg_power = sum(ct5_dict['power']) / length
     ct5_avg_current = sum(ct5_dict['current']) / length
     ct5_avg_pf = sum(ct5_dict['pf']) / length
-    ct6_avg_power = sum(ct6_dict['power']) / length
-    ct6_avg_current = sum(ct6_dict['current']) / length
-    ct6_avg_pf = sum(ct6_dict['pf']) / length
-    avg_voltage = sum(voltages) / length
+    avg_dc_voltage = sum(dc_voltages) / length
+    avg_ac_voltage = sum(ac_voltages) / length
 
     # Create Points
     home_load = Point('home_load', power=avg_home_power, current=avg_home_current, time=poll_time)
@@ -204,8 +202,8 @@ def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_
     ct3 = Point('ct', power=ct3_avg_power, current=ct3_avg_current, pf=ct3_avg_pf, time=poll_time, num=3)
     ct4 = Point('ct', power=ct4_avg_power, current=ct4_avg_current, pf=ct4_avg_pf, time=poll_time, num=4)
     ct5 = Point('ct', power=ct5_avg_power, current=ct5_avg_current, pf=ct5_avg_pf, time=poll_time, num=5)
-    ct6 = Point('ct', power=ct6_avg_power, current=ct6_avg_current, pf=ct6_avg_pf, time=poll_time, num=6)
-    v = Point('voltage', voltage=avg_voltage, v_input=0, time=poll_time)
+    dc_v = Point('dc voltage', voltage=avg_dc_voltage, v_input=0, time=poll_time)
+    ac_v = Point('ac voltage', voltage=avg_ac_voltage, v_input=0, time=poll_time)
 
     points = [
         home_load.to_dict(),
@@ -216,11 +214,11 @@ def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_
         ct3.to_dict(),
         ct4.to_dict(),
         ct5.to_dict(),
-        ct6.to_dict(),
-        v.to_dict(),
+        dc_v.to_dict(),
+        ac_v.to_dict(),
     ]
 
-    try:    
+    try:
         client.write_points(points, time_precision='ms')
     except InfluxDBServerError as e:
         logger.critical(f"Failed to write data to Influx. Reason: {e}")

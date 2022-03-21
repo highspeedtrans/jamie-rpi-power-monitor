@@ -1,7 +1,7 @@
 # This module contains functions that are used in both the main power-monitor code and the calibration code.
 
 from datetime import datetime
-from config import ct_phase_correction, ct1_channel, ct2_channel, ct3_channel, ct4_channel, ct5_channel, ct6_channel, board_voltage_channel, v_sensor_channel, logger
+from config import ct_phase_correction, ct1_channel, ct2_channel, ct3_channel, ct4_channel, ct5_channel, board_voltage_channel, ac_v_sensor_channel, dc_v_sensor_channel, logger
 import spidev
 import subprocess
 import docker
@@ -23,40 +23,40 @@ def readadc(adcnum):
 def collect_data(numSamples):
     # Get time of reading
     now = datetime.utcnow()
-    
+
     samples = []
     ct1_data = []
     ct2_data = []
     ct3_data = []
     ct4_data = []
     ct5_data = []
-    ct6_data = []
-    v_data = []
+    dc_v_data = []
+    ac_v_data = []
 
     for _ in range(numSamples):
         ct1 = readadc(ct1_channel)
         ct5 = readadc(ct5_channel)
         ct2 = readadc(ct2_channel)
-        v = readadc(v_sensor_channel)
+        ac_v = readadc(ac_v_sensor_channel)
         ct3 = readadc(ct3_channel)
         ct4 = readadc(ct4_channel)
-        ct6 = readadc(ct6_channel)
+        dc_v = readadc(dc_v_sensor_channel)
         ct1_data.append(ct1)
         ct2_data.append(ct2)
         ct3_data.append(ct3)
         ct4_data.append(ct4)
         ct5_data.append(ct5)
-        ct6_data.append(ct6)
-        v_data.append(v)    
-    
+        dc_v_data.append(dc_v)
+        ac_v_data.append(ac_v)
+
     samples = {
         'ct1' : ct1_data,
         'ct2' : ct2_data,
         'ct3' : ct3_data,
         'ct4' : ct4_data,
         'ct5' : ct5_data,
-        'ct6' : ct6_data,
-        'voltage' : v_data,
+        'dc_voltage' : dc_v_data,
+        'ac_voltage' : ac_v_data,
         'time' : now,
     }
     return samples
@@ -101,13 +101,13 @@ def recover_influx_container():
                     exit_code = influx_container.attrs['State']['ExitCode']
                     logs = influx_container.logs(tail=20)
 
-                    logger.info(dedent(f"""Sorry, I couldn't fix your InfluxDB container. Here's some information that may help you: 
+                    logger.info(dedent(f"""Sorry, I couldn't fix your InfluxDB container. Here's some information that may help you:
                     Container Exit Code: {exit_code}
                     Logs:"""
                     ))
                     for line in logs.splitlines():
                         logger.info(f"   {line}")
-                    
+
                     sys.exit()
 
                 else:

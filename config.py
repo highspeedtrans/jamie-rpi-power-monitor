@@ -13,8 +13,10 @@ logger.addHandler(ch)
 
 # Using a multimeter, measure the voltage of the receptacle where your 9V AC transformer will plug into. Enter the measured value below.
 GRID_VOLTAGE = 124.2
+BATTERY_VOLTAGE = 24.0
 # Using a multimeter, measure the output voltage of your AC transformer. Using the value on the label is not ideal and will lead to greater accuracy in the calculations.
 AC_TRANSFORMER_OUTPUT_VOLTAGE = 10.2
+DC_SENSE_OUTPUT_VOLTAGE = 4.0
 
 # InfluxDB Settings
 db_settings = {
@@ -30,11 +32,11 @@ db_settings = {
 ct1_channel = 0             # Orange Pair           | House main (leg 1 - left)  (orange pair)
 ct2_channel = 1             # Green Pair            | House main (leg 2 - right) (green pair)
 ct3_channel = 2             # Blue Pair             | Subpanel main (leg 1 - top)
-ct4_channel = 3             # Brown Pair            | Solar Power 
+ct4_channel = 3             # Brown Pair            | Solar Power
 ct5_channel = 6             # 3.5mm Input #1        | Subpanel main (leg 2 - bottom)
 board_voltage_channel =  4  # Board voltage ~3.3V
-v_sensor_channel = 5        # 9V AC Voltage channel
-ct6_channel = 7             # 3.5mm Input #2        | Unused
+ac_v_sensor_channel = 5        # 9V AC Voltage channel
+dc_v_sensor_channel = 7             # 3.5mm Input #2        | Unused
 
 # The values from running the software in "phase" mode should go below!
 ct_phase_correction = {
@@ -42,8 +44,7 @@ ct_phase_correction = {
     'ct2' : 1,
     'ct3' : 1,
     'ct4' : 1,
-    'ct5' : 1,
-    'ct6' : 1,
+    'ct5' : 1
 }
 
 # AFTER phase correction is completed, these values are used in the final calibration for accuracy. See the documentation for more information.
@@ -53,6 +54,6 @@ accuracy_calibration = {
     'ct3' : 1,
     'ct4' : 1,
     'ct5' : 1,
-    'ct6' : 1,
+    'DC' : 1,
     'AC'  : 1,
 }
