@@ -26,7 +26,7 @@ from shutil import copyfile
 
 # Static Variables - these should not be changed by the end user
 AC_voltage_ratio            = (GRID_VOLTAGE / AC_TRANSFORMER_OUTPUT_VOLTAGE) * 11   # This is a rough approximation of the ratio
-DC_voltage_ratio            = (BATTERY_VOLTAGE / DC_SENSE_OUTPUT_VOLTAGE) * 11
+DC_voltage_ratio            = (BATTERY_VOLTAGE / DC_SENSE_OUTPUT_VOLTAGE)
 # Phase Calibration - note that these items are listed in the order they are sampled.
 # Changes to these values are made in config.py, in the ct_phase_correction dictionary.
 ct1_phasecal = ct_phase_correction['ct1']
