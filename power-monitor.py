@@ -87,7 +87,8 @@ def calculate_power(samples, board_voltage):
     v_samples_3 = samples['v_ct3']      # phase-corrected voltage wave specifically for ct3
     v_samples_4 = samples['v_ct4']      # phase-corrected voltage wave specifically for ct4
     v_samples_5 = samples['v_ct5']      # phase-corrected voltage wave specifically for ct5
-    # TODO: power calc for DC bus (battery)
+    ac_v_samples = samples['ac_voltage']
+    dc_v_samples = samples['dc_voltage']
 
     # Variable Initialization
     sum_inst_power_ct1 = 0
@@ -110,11 +111,15 @@ def calculate_power(samples, board_voltage):
     sum_squared_voltage_3 = 0
     sum_squared_voltage_4 = 0
     sum_squared_voltage_5 = 0
+    sum_squared_ac_voltage = 0
+    sum_squared_dc_voltage = 0
     sum_raw_voltage_1 = 0
     sum_raw_voltage_2 = 0
     sum_raw_voltage_3 = 0
     sum_raw_voltage_4 = 0
     sum_raw_voltage_5 = 0
+    sum_raw_ac_voltage = 0
+    sum_raw_dc_voltage = 0
 
     # Scaling factors
     vref = board_voltage / 1024
@@ -140,6 +145,8 @@ def calculate_power(samples, board_voltage):
         voltage_3 = (int(v_samples_3[i]))
         voltage_4 = (int(v_samples_4[i]))
         voltage_5 = (int(v_samples_5[i]))
+        ac_voltage = (int(ac_v_samples[i]))
+        dc_voltage = (int(dc_v_samples[i]))
 
         # Process all data in a single function to reduce runtime complexity
         # Get the sum of all current samples individually
@@ -153,6 +160,8 @@ def calculate_power(samples, board_voltage):
         sum_raw_voltage_3 += voltage_3
         sum_raw_voltage_4 += voltage_4
         sum_raw_voltage_5 += voltage_5
+        sum_raw_ac_voltage += ac_voltage
+        sum_raw_dc_voltage += dc_voltage
 
 
         # Calculate instant power for each ct sensor
@@ -173,11 +182,15 @@ def calculate_power(samples, board_voltage):
         squared_voltage_3 = voltage_3 * voltage_3
         squared_voltage_4 = voltage_4 * voltage_4
         squared_voltage_5 = voltage_5 * voltage_5
+        squared_ac_voltage = ac_voltage * ac_voltage
+        squared_dc_voltage = dc_voltage * dc_voltage
         sum_squared_voltage_1 += squared_voltage_1
         sum_squared_voltage_2 += squared_voltage_2
         sum_squared_voltage_3 += squared_voltage_3
         sum_squared_voltage_4 += squared_voltage_4
         sum_squared_voltage_5 += squared_voltage_5
+        sum_squared_ac_voltage += squared_ac_voltage
+        sum_squared_dc_voltage += squared_dc_voltage
 
         # Squared current
         sq_ct1 = ct1 * ct1
@@ -202,6 +215,8 @@ def calculate_power(samples, board_voltage):
     avg_raw_voltage_3 = sum_raw_voltage_3 / num_samples
     avg_raw_voltage_4 = sum_raw_voltage_4 / num_samples
     avg_raw_voltage_5 = sum_raw_voltage_5 / num_samples
+    avg_raw_ac_voltage = sum_raw_ac_voltage / num_samples
+    avg_raw_dc_voltage = sum_raw_dc_voltage / sum_samples
 
     real_power_1 = ((sum_inst_power_ct1 / num_samples) - (avg_raw_current_ct1 * avg_raw_voltage_1))  * ct1_scaling_factor * ac_voltage_scaling_factor
     real_power_2 = ((sum_inst_power_ct2 / num_samples) - (avg_raw_current_ct2 * avg_raw_voltage_2))  * ct2_scaling_factor * ac_voltage_scaling_factor
@@ -219,6 +234,8 @@ def calculate_power(samples, board_voltage):
     mean_square_voltage_3 = sum_squared_voltage_3 / num_samples
     mean_square_voltage_4 = sum_squared_voltage_4 / num_samples
     mean_square_voltage_5 = sum_squared_voltage_5 / num_samples
+    mean_square_ac_voltage = sum_squared_ac_voltage / num_samples
+    mean_square_dc_voltage = sum_squared_dc_voltage / num_samples
 
     rms_current_ct1 = sqrt(mean_square_current_ct1 - (avg_raw_current_ct1 * avg_raw_current_ct1)) * ct1_scaling_factor
     rms_current_ct2 = sqrt(mean_square_current_ct2 - (avg_raw_current_ct2 * avg_raw_current_ct2)) * ct2_scaling_factor
@@ -230,6 +247,8 @@ def calculate_power(samples, board_voltage):
     rms_voltage_3     = sqrt(mean_square_voltage_3 - (avg_raw_voltage_3 * avg_raw_voltage_3)) * ac_voltage_scaling_factor
     rms_voltage_4     = sqrt(mean_square_voltage_4 - (avg_raw_voltage_4 * avg_raw_voltage_4)) * ac_voltage_scaling_factor
     rms_voltage_5     = sqrt(mean_square_voltage_5 - (avg_raw_voltage_5 * avg_raw_voltage_5)) * ac_voltage_scaling_factor
+    rms_ac_voltage    = sqrt(mean_square_ac_voltage - (avg_raw_ac_voltage * avg_raw_ac_voltage)) * ac_voltage_scaling_factor
+    rms_dc_voltage    = sqrt(mean_square_dc_voltage - (avg_raw_dc_voltage * avg_raw_dc_voltage)) * dc_voltage_scaling_factor
 
     # Power Factor
     apparent_power_1 = rms_voltage_1 * rms_current_ct1
@@ -297,8 +316,8 @@ def calculate_power(samples, board_voltage):
             'ac_voltage'   : rms_voltage_5,
             'pf'        : power_factor_5
         },
-        #'dc_voltage' : rms_dc_voltage_1, #TODO figure out DC voltage reporting
-        'ac_voltage' : rms_voltage_1,
+        'dc_voltage' : rms_dc_voltage,
+        'ac_voltage' : rms_ac_voltage
     }
 
     return results
@@ -312,16 +331,17 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
     wave_4 = []
     wave_5 = []
 
-    voltage_samples = samples['ac_voltage']
+    ac_voltage_samples = samples['ac_voltage']
+    dc_voltage_samples = samples['dc_voltage']
 
-    wave_1.append(voltage_samples[0])
-    wave_2.append(voltage_samples[0])
-    wave_3.append(voltage_samples[0])
-    wave_4.append(voltage_samples[0])
-    wave_5.append(voltage_samples[0])
-    previous_point = voltage_samples[0]
+    wave_1.append(ac_voltage_samples[0])
+    wave_2.append(ac_voltage_samples[0])
+    wave_3.append(ac_voltage_samples[0])
+    wave_4.append(ac_voltage_samples[0])
+    wave_5.append(ac_voltage_samples[0])
+    previous_point = ac_voltage_samples[0]
 
-    for current_point in voltage_samples[1:]:
+    for current_point in ac_voltage_samples[1:]:
         new_point_1 = previous_point + PHASECAL_1 * (current_point - previous_point)
         new_point_2 = previous_point + PHASECAL_2 * (current_point - previous_point)
         new_point_3 = previous_point + PHASECAL_3 * (current_point - previous_point)
@@ -342,7 +362,8 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
         'v_ct3' : wave_3,
         'v_ct4' : wave_4,
         'v_ct5' : wave_5,
-        'ac_voltage' : voltage_samples,
+        'ac_voltage' : ac_voltage_samples,
+        'dc_voltage' : dc_voltage_samples,
         'ct1' : samples['ct1'],
         'ct2' : samples['ct2'],
         'ct3' : samples['ct3'],
