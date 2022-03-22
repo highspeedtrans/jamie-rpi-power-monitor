@@ -16,7 +16,7 @@ GRID_VOLTAGE = 124.2
 BATTERY_VOLTAGE = 10.4
 # Using a multimeter, measure the output voltage of your AC transformer. Using the value on the label is not ideal and will lead to greater accuracy in the calculations.
 AC_TRANSFORMER_OUTPUT_VOLTAGE = 10.2
-DC_SENSE_OUTPUT_VOLTAGE = 2.5
+DC_SENSE_OUTPUT_VOLTAGE = 2.65
 
 # InfluxDB Settings
 db_settings = {
