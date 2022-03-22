@@ -434,6 +434,7 @@ def run_main():
             # solar_current = results['ct4']['current']
             # solar_pf = results['ct4']['pf']
             ac_voltage = results['ac_voltage']
+            dc_voltage = results['dc_voltage']
 
             # Set solar power and current to zero if the solar power is under 20W.
             if solar_power < 20:
