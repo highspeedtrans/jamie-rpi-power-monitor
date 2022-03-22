@@ -13,10 +13,10 @@ logger.addHandler(ch)
 
 # Using a multimeter, measure the voltage of the receptacle where your 9V AC transformer will plug into. Enter the measured value below.
 GRID_VOLTAGE = 124.2
-BATTERY_VOLTAGE = 24.0
+BATTERY_VOLTAGE = 10.4
 # Using a multimeter, measure the output voltage of your AC transformer. Using the value on the label is not ideal and will lead to greater accuracy in the calculations.
 AC_TRANSFORMER_OUTPUT_VOLTAGE = 10.2
-DC_SENSE_OUTPUT_VOLTAGE = 4.0
+DC_SENSE_OUTPUT_VOLTAGE = 2.5
 
 # InfluxDB Settings
 db_settings = {
