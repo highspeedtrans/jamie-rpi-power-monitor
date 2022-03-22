@@ -266,35 +266,35 @@ def calculate_power(samples, board_voltage):
             'type'      : 'consumption',
             'power'     : real_power_1,
             'current'   : rms_current_ct1,
-            'voltage'   : rms_voltage_1,
+            'ac_voltage'   : rms_voltage_1,
             'pf'        : power_factor_1
         },
         'ct2' : {
             'type'      : 'consumption',
             'power'     : real_power_2,
             'current'   : rms_current_ct2,
-            'voltage'   : rms_voltage_2,
+            'ac_voltage'   : rms_voltage_2,
             'pf'        : power_factor_2
         },
         'ct3' : {
             'type'      : 'consumption',
             'power'     : real_power_3,
             'current'   : rms_current_ct3,
-            'voltage'   : rms_voltage_3,
+            'ac_voltage'   : rms_voltage_3,
             'pf'        : power_factor_3
         },
         'ct4' : {
             'type'      : 'consumption',
             'power'     : real_power_4,
             'current'   : rms_current_ct4,
-            'voltage'   : rms_voltage_4,
+            'ac_voltage'   : rms_voltage_4,
             'pf'        : power_factor_4
         },
         'ct5' : {
             'type'      : 'consumption',
             'power'     : real_power_5,
             'current'   : rms_current_ct5,
-            'voltage'   : rms_voltage_5,
+            'ac_voltage'   : rms_voltage_5,
             'pf'        : power_factor_5
         },
         'dc_voltage' : rms_dc_voltage_1,
@@ -312,7 +312,7 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
     wave_4 = []
     wave_5 = []
 
-    voltage_samples = samples['voltage']
+    voltage_samples = samples['ac_voltage']
 
     wave_1.append(voltage_samples[0])
     wave_2.append(voltage_samples[0])
@@ -342,7 +342,7 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
         'v_ct3' : wave_3,
         'v_ct4' : wave_4,
         'v_ct5' : wave_5,
-        'voltage' : voltage_samples,
+        'ac_voltage' : voltage_samples,
         'ct1' : samples['ct1'],
         'ct2' : samples['ct2'],
         'ct3' : samples['ct3'],
