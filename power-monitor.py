@@ -13,7 +13,7 @@ from socket import socket, AF_INET, SOCK_DGRAM
 import fcntl
 from prettytable import PrettyTable
 import logging
-from config import logger, ct_phase_correction, ct2_channel, ct3_channel, ct4_channel, ct5_channel, ct6_channel, board_voltage_channel, ac_v_sensor_channel, dc_v_sensor_channel, GRID_VOLTAGE, AC_TRANSFORMER_OUTPUT_VOLTAGE, BATTERY_VOLTAGE, DC_SENSE_OUTPUT_VOLTAGE, accuracy_calibration, db_settings
+from config import logger, ct_phase_correction, ct2_channel, ct3_channel, ct4_channel, ct5_channel, board_voltage_channel, ac_v_sensor_channel, dc_v_sensor_channel, GRID_VOLTAGE, AC_TRANSFORMER_OUTPUT_VOLTAGE, BATTERY_VOLTAGE, DC_SENSE_OUTPUT_VOLTAGE, accuracy_calibration, db_settings
 from calibration import check_phasecal, rebuild_wave, find_phasecal
 from textwrap import dedent
 from common import collect_data, readadc, recover_influx_container
