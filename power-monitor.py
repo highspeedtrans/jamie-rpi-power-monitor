@@ -248,7 +248,7 @@ def calculate_power(samples, board_voltage):
     rms_voltage_4     = sqrt(mean_square_voltage_4 - (avg_raw_voltage_4 * avg_raw_voltage_4)) * ac_voltage_scaling_factor
     rms_voltage_5     = sqrt(mean_square_voltage_5 - (avg_raw_voltage_5 * avg_raw_voltage_5)) * ac_voltage_scaling_factor
     rms_ac_voltage    = sqrt(mean_square_ac_voltage - (avg_raw_ac_voltage * avg_raw_ac_voltage)) * ac_voltage_scaling_factor
-    rms_dc_voltage    = sqrt(mean_square_dc_voltage - (avg_raw_dc_voltage * avg_raw_dc_voltage)) * dc_voltage_scaling_factor
+    rms_dc_voltage    = sqrt(mean_square_dc_voltage) * dc_voltage_scaling_factor
 
     # Power Factor
     apparent_power_1 = rms_voltage_1 * rms_current_ct1
