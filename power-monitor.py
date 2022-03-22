@@ -298,7 +298,7 @@ def calculate_power(samples, board_voltage):
             'pf'        : power_factor_5
         },
         #'dc_voltage' : rms_dc_voltage_1, #TODO figure out DC voltage reporting
-        'ac_voltage' : rms_ac_voltage_1,
+        'ac_voltage' : rms_voltage_1,
     }
 
     return results
