@@ -216,7 +216,7 @@ def calculate_power(samples, board_voltage):
     avg_raw_voltage_4 = sum_raw_voltage_4 / num_samples
     avg_raw_voltage_5 = sum_raw_voltage_5 / num_samples
     avg_raw_ac_voltage = sum_raw_ac_voltage / num_samples
-    avg_raw_dc_voltage = sum_raw_dc_voltage / sum_samples
+    avg_raw_dc_voltage = sum_raw_dc_voltage / num_samples
 
     real_power_1 = ((sum_inst_power_ct1 / num_samples) - (avg_raw_current_ct1 * avg_raw_voltage_1))  * ct1_scaling_factor * ac_voltage_scaling_factor
     real_power_2 = ((sum_inst_power_ct2 / num_samples) - (avg_raw_current_ct2 * avg_raw_voltage_2))  * ct2_scaling_factor * ac_voltage_scaling_factor
