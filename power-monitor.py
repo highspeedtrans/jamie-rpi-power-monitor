@@ -13,7 +13,7 @@ from socket import socket, AF_INET, SOCK_DGRAM
 import fcntl
 from prettytable import PrettyTable
 import logging
-from config import logger, ct_phase_correction, ct2_channel, ct3_channel, ct4_channel, ct5_channel, ct6_channel, ct6_channel, board_voltage_channel, v_sensor_channel, GRID_VOLTAGE, AC_TRANSFORMER_OUTPUT_VOLTAGE, accuracy_calibration, db_settings
+from config import logger, ct_phase_correction, ct2_channel, ct3_channel, ct4_channel, ct5_channel, board_voltage_channel, ac_v_sensor_channel, dc_v_sensor_channel, GRID_VOLTAGE, AC_TRANSFORMER_OUTPUT_VOLTAGE, BATTERY_VOLTAGE, DC_SENSE_OUTPUT_VOLTAGE, accuracy_calibration, db_settings
 from calibration import check_phasecal, rebuild_wave, find_phasecal
 from textwrap import dedent
 from common import collect_data, readadc, recover_influx_container
@@ -26,6 +26,7 @@ from shutil import copyfile
 
 # Static Variables - these should not be changed by the end user
 AC_voltage_ratio            = (GRID_VOLTAGE / AC_TRANSFORMER_OUTPUT_VOLTAGE) * 11   # This is a rough approximation of the ratio
+DC_voltage_ratio            = (BATTERY_VOLTAGE / DC_SENSE_OUTPUT_VOLTAGE)
 # Phase Calibration - note that these items are listed in the order they are sampled.
 # Changes to these values are made in config.py, in the ct_phase_correction dictionary.
 ct1_phasecal = ct_phase_correction['ct1']
@@ -33,13 +34,12 @@ ct2_phasecal = ct_phase_correction['ct2']
 ct3_phasecal = ct_phase_correction['ct3']
 ct4_phasecal = ct_phase_correction['ct4']
 ct5_phasecal = ct_phase_correction['ct5']
-ct6_phasecal = ct_phase_correction['ct6']
 ct1_accuracy_factor         = accuracy_calibration['ct1']
 ct2_accuracy_factor         = accuracy_calibration['ct2']
 ct3_accuracy_factor         = accuracy_calibration['ct3']
 ct4_accuracy_factor         = accuracy_calibration['ct4']
 ct5_accuracy_factor         = accuracy_calibration['ct5']
-ct6_accuracy_factor         = accuracy_calibration['ct6']
+DC_voltage_accuracy_factor  = accuracy_calibration['DC']
 AC_voltage_accuracy_factor  = accuracy_calibration['AC']
 
 
@@ -49,30 +49,30 @@ def dump_data(dump_type, samples):
     now = datetime.now().stfrtime('%m-%d-%Y-%H-%M')
     filename = f'data-dump-{now}.csv'
     with open(filename, 'w') as f:
-        headers = ["Sample#", "ct1", "ct2", "ct3", "ct4", "ct5", "ct6", "voltage"]
+        headers = ["Sample#", "ct1", "ct2", "ct3", "ct4", "ct5", "dc voltage", "ac voltage"]
         writer = csv.writer(f)
         writer.writerow(headers)
-        # samples contains lists for each data sample. 
+        # samples contains lists for each data sample.
         for i in range(0, len(samples[0])):
             ct1_data = samples[0]
             ct2_data = samples[1]
             ct3_data = samples[2]
             ct4_data = samples[3]
             ct5_data = samples[4]
-            ct6_data = samples[5]
-            v_data = samples[-1]
-            writer.writerow([i, ct1_data[i], ct2_data[i], ct3_data[i], ct4_data[i], ct5_data[i], ct6_data[i], v_data[i]])
+            dc_v_data = samples[5]
+            ac_v_data = samples[-1]
+            writer.writerow([i, ct1_data[i], ct2_data[i], ct3_data[i], ct4_data[i], ct5_data[i], dc_v_data[i], ac_v_data[i]])
     logger.info(f"CSV written to {filename}.")
 
 def get_board_voltage():
-    # Take 10 sample readings and return the average board voltage from the +3.3V rail. 
+    # Take 10 sample readings and return the average board voltage from the +3.3V rail.
     samples = []
     while len(samples) <= 10:
         data = readadc(board_voltage_channel)
         samples.append(data)
 
     avg_reading = sum(samples) / len(samples)
-    board_voltage = (avg_reading / 1024) * 3.31 * 2    
+    board_voltage = (avg_reading / 1024) * 3.31 * 2
     return board_voltage
 
 # Phase corrected power calculation
@@ -82,45 +82,44 @@ def calculate_power(samples, board_voltage):
     ct3_samples = samples['ct3']        # current samples for ct3
     ct4_samples = samples['ct4']        # current samples for ct4
     ct5_samples = samples['ct5']        # current samples for ct5
-    ct6_samples = samples['ct6']        # current samples for ct6
     v_samples_1 = samples['v_ct1']      # phase-corrected voltage wave specifically for ct1
     v_samples_2 = samples['v_ct2']      # phase-corrected voltage wave specifically for ct2
     v_samples_3 = samples['v_ct3']      # phase-corrected voltage wave specifically for ct3
     v_samples_4 = samples['v_ct4']      # phase-corrected voltage wave specifically for ct4
-    v_samples_5 = samples['v_ct5']      # phase-corrected voltage wave specifically for ct5   
-    v_samples_6 = samples['v_ct6']      # phase-corrected voltage wave specifically for ct6   
+    v_samples_5 = samples['v_ct5']      # phase-corrected voltage wave specifically for ct5
+    ac_v_samples = samples['ac_voltage']
+    dc_v_samples = samples['dc_voltage']
 
-    # Variable Initialization    
+    # Variable Initialization
     sum_inst_power_ct1 = 0
     sum_inst_power_ct2 = 0
     sum_inst_power_ct3 = 0
     sum_inst_power_ct4 = 0
     sum_inst_power_ct5 = 0
-    sum_inst_power_ct6 = 0
-    sum_squared_current_ct1 = 0 
+    sum_squared_current_ct1 = 0
     sum_squared_current_ct2 = 0
     sum_squared_current_ct3 = 0
     sum_squared_current_ct4 = 0
     sum_squared_current_ct5 = 0
-    sum_squared_current_ct6 = 0
     sum_raw_current_ct1 = 0
     sum_raw_current_ct2 = 0
     sum_raw_current_ct3 = 0
     sum_raw_current_ct4 = 0
     sum_raw_current_ct5 = 0
-    sum_raw_current_ct6 = 0
     sum_squared_voltage_1 = 0
     sum_squared_voltage_2 = 0
     sum_squared_voltage_3 = 0
     sum_squared_voltage_4 = 0
     sum_squared_voltage_5 = 0
-    sum_squared_voltage_6 = 0
+    sum_squared_ac_voltage = 0
+    sum_squared_dc_voltage = 0
     sum_raw_voltage_1 = 0
     sum_raw_voltage_2 = 0
     sum_raw_voltage_3 = 0
     sum_raw_voltage_4 = 0
     sum_raw_voltage_5 = 0
-    sum_raw_voltage_6 = 0
+    sum_raw_ac_voltage = 0
+    sum_raw_dc_voltage = 0
 
     # Scaling factors
     vref = board_voltage / 1024
@@ -129,25 +128,25 @@ def calculate_power(samples, board_voltage):
     ct3_scaling_factor = vref * 100 * ct3_accuracy_factor
     ct4_scaling_factor = vref * 100 * ct4_accuracy_factor
     ct5_scaling_factor = vref * 100 * ct5_accuracy_factor
-    ct6_scaling_factor = vref * 100 * ct6_accuracy_factor
-    voltage_scaling_factor = vref * AC_voltage_ratio * AC_voltage_accuracy_factor
-    
+    ac_voltage_scaling_factor = vref * AC_voltage_ratio * AC_voltage_accuracy_factor
+    dc_voltage_scaling_factor = vref * DC_voltage_ratio * DC_voltage_accuracy_factor
+
 
     num_samples = len(v_samples_1)
-    
+
     for i in range(0, num_samples):
         ct1 = (int(ct1_samples[i]))
         ct2 = (int(ct2_samples[i]))
         ct3 = (int(ct3_samples[i]))
         ct4 = (int(ct4_samples[i]))
         ct5 = (int(ct5_samples[i]))
-        ct6 = (int(ct6_samples[i]))
         voltage_1 = (int(v_samples_1[i]))
         voltage_2 = (int(v_samples_2[i]))
         voltage_3 = (int(v_samples_3[i]))
         voltage_4 = (int(v_samples_4[i]))
         voltage_5 = (int(v_samples_5[i]))
-        voltage_6 = (int(v_samples_6[i]))
+        ac_voltage = (int(ac_v_samples[i]))
+        dc_voltage = (int(dc_v_samples[i]))
 
         # Process all data in a single function to reduce runtime complexity
         # Get the sum of all current samples individually
@@ -156,13 +155,13 @@ def calculate_power(samples, board_voltage):
         sum_raw_current_ct3 += ct3
         sum_raw_current_ct4 += ct4
         sum_raw_current_ct5 += ct5
-        sum_raw_current_ct6 += ct6
         sum_raw_voltage_1 += voltage_1
         sum_raw_voltage_2 += voltage_2
         sum_raw_voltage_3 += voltage_3
         sum_raw_voltage_4 += voltage_4
         sum_raw_voltage_5 += voltage_5
-        sum_raw_voltage_6 += voltage_6
+        sum_raw_ac_voltage += ac_voltage
+        sum_raw_dc_voltage += dc_voltage
 
 
         # Calculate instant power for each ct sensor
@@ -171,13 +170,11 @@ def calculate_power(samples, board_voltage):
         inst_power_ct3 = ct3 * voltage_3
         inst_power_ct4 = ct4 * voltage_4
         inst_power_ct5 = ct5 * voltage_5
-        inst_power_ct6 = ct6 * voltage_6
         sum_inst_power_ct1 += inst_power_ct1
         sum_inst_power_ct2 += inst_power_ct2
         sum_inst_power_ct3 += inst_power_ct3
         sum_inst_power_ct4 += inst_power_ct4
         sum_inst_power_ct5 += inst_power_ct5
-        sum_inst_power_ct6 += inst_power_ct6
 
         # Squared voltage
         squared_voltage_1 = voltage_1 * voltage_1
@@ -185,13 +182,15 @@ def calculate_power(samples, board_voltage):
         squared_voltage_3 = voltage_3 * voltage_3
         squared_voltage_4 = voltage_4 * voltage_4
         squared_voltage_5 = voltage_5 * voltage_5
-        squared_voltage_6 = voltage_6 * voltage_6
+        squared_ac_voltage = ac_voltage * ac_voltage
+        squared_dc_voltage = dc_voltage * dc_voltage
         sum_squared_voltage_1 += squared_voltage_1
         sum_squared_voltage_2 += squared_voltage_2
         sum_squared_voltage_3 += squared_voltage_3
         sum_squared_voltage_4 += squared_voltage_4
         sum_squared_voltage_5 += squared_voltage_5
-        sum_squared_voltage_6 += squared_voltage_6
+        sum_squared_ac_voltage += squared_ac_voltage
+        sum_squared_dc_voltage += squared_dc_voltage
 
         # Squared current
         sq_ct1 = ct1 * ct1
@@ -199,60 +198,57 @@ def calculate_power(samples, board_voltage):
         sq_ct3 = ct3 * ct3
         sq_ct4 = ct4 * ct4
         sq_ct5 = ct5 * ct5
-        sq_ct6 = ct6 * ct6
-        
+
         sum_squared_current_ct1 += sq_ct1
         sum_squared_current_ct2 += sq_ct2
         sum_squared_current_ct3 += sq_ct3
         sum_squared_current_ct4 += sq_ct4
         sum_squared_current_ct5 += sq_ct5
-        sum_squared_current_ct6 += sq_ct6
 
     avg_raw_current_ct1 = sum_raw_current_ct1 / num_samples
     avg_raw_current_ct2 = sum_raw_current_ct2 / num_samples
     avg_raw_current_ct3 = sum_raw_current_ct3 / num_samples
     avg_raw_current_ct4 = sum_raw_current_ct4 / num_samples
     avg_raw_current_ct5 = sum_raw_current_ct5 / num_samples
-    avg_raw_current_ct6 = sum_raw_current_ct6 / num_samples
     avg_raw_voltage_1 = sum_raw_voltage_1 / num_samples
     avg_raw_voltage_2 = sum_raw_voltage_2 / num_samples
     avg_raw_voltage_3 = sum_raw_voltage_3 / num_samples
     avg_raw_voltage_4 = sum_raw_voltage_4 / num_samples
     avg_raw_voltage_5 = sum_raw_voltage_5 / num_samples
-    avg_raw_voltage_6 = sum_raw_voltage_6 / num_samples
-    
-    real_power_1 = ((sum_inst_power_ct1 / num_samples) - (avg_raw_current_ct1 * avg_raw_voltage_1))  * ct1_scaling_factor * voltage_scaling_factor
-    real_power_2 = ((sum_inst_power_ct2 / num_samples) - (avg_raw_current_ct2 * avg_raw_voltage_2))  * ct2_scaling_factor * voltage_scaling_factor 
-    real_power_3 = ((sum_inst_power_ct3 / num_samples) - (avg_raw_current_ct3 * avg_raw_voltage_3))  * ct3_scaling_factor * voltage_scaling_factor 
-    real_power_4 = ((sum_inst_power_ct4 / num_samples) - (avg_raw_current_ct4 * avg_raw_voltage_4))  * ct4_scaling_factor * voltage_scaling_factor 
-    real_power_5 = ((sum_inst_power_ct5 / num_samples) - (avg_raw_current_ct5 * avg_raw_voltage_5))  * ct5_scaling_factor * voltage_scaling_factor 
-    real_power_6 = ((sum_inst_power_ct6 / num_samples) - (avg_raw_current_ct6 * avg_raw_voltage_6))  * ct6_scaling_factor * voltage_scaling_factor 
+    avg_raw_ac_voltage = sum_raw_ac_voltage / num_samples
+    avg_raw_dc_voltage = sum_raw_dc_voltage / num_samples
 
-    mean_square_current_ct1 = sum_squared_current_ct1 / num_samples 
-    mean_square_current_ct2 = sum_squared_current_ct2 / num_samples 
-    mean_square_current_ct3 = sum_squared_current_ct3 / num_samples 
-    mean_square_current_ct4 = sum_squared_current_ct4 / num_samples 
-    mean_square_current_ct5 = sum_squared_current_ct5 / num_samples 
-    mean_square_current_ct6 = sum_squared_current_ct6 / num_samples 
+    real_power_1 = ((sum_inst_power_ct1 / num_samples) - (avg_raw_current_ct1 * avg_raw_voltage_1))  * ct1_scaling_factor * ac_voltage_scaling_factor
+    real_power_2 = ((sum_inst_power_ct2 / num_samples) - (avg_raw_current_ct2 * avg_raw_voltage_2))  * ct2_scaling_factor * ac_voltage_scaling_factor
+    real_power_3 = ((sum_inst_power_ct3 / num_samples) - (avg_raw_current_ct3 * avg_raw_voltage_3))  * ct3_scaling_factor * ac_voltage_scaling_factor
+    real_power_4 = ((sum_inst_power_ct4 / num_samples) - (avg_raw_current_ct4 * avg_raw_voltage_4))  * ct4_scaling_factor * ac_voltage_scaling_factor
+    real_power_5 = ((sum_inst_power_ct5 / num_samples) - (avg_raw_current_ct5 * avg_raw_voltage_5))  * ct5_scaling_factor * ac_voltage_scaling_factor
+
+    mean_square_current_ct1 = sum_squared_current_ct1 / num_samples
+    mean_square_current_ct2 = sum_squared_current_ct2 / num_samples
+    mean_square_current_ct3 = sum_squared_current_ct3 / num_samples
+    mean_square_current_ct4 = sum_squared_current_ct4 / num_samples
+    mean_square_current_ct5 = sum_squared_current_ct5 / num_samples
     mean_square_voltage_1 = sum_squared_voltage_1 / num_samples
     mean_square_voltage_2 = sum_squared_voltage_2 / num_samples
     mean_square_voltage_3 = sum_squared_voltage_3 / num_samples
     mean_square_voltage_4 = sum_squared_voltage_4 / num_samples
     mean_square_voltage_5 = sum_squared_voltage_5 / num_samples
-    mean_square_voltage_6 = sum_squared_voltage_6 / num_samples
+    mean_square_ac_voltage = sum_squared_ac_voltage / num_samples
+    mean_square_dc_voltage = sum_squared_dc_voltage / num_samples
 
     rms_current_ct1 = sqrt(mean_square_current_ct1 - (avg_raw_current_ct1 * avg_raw_current_ct1)) * ct1_scaling_factor
     rms_current_ct2 = sqrt(mean_square_current_ct2 - (avg_raw_current_ct2 * avg_raw_current_ct2)) * ct2_scaling_factor
     rms_current_ct3 = sqrt(mean_square_current_ct3 - (avg_raw_current_ct3 * avg_raw_current_ct3)) * ct3_scaling_factor
     rms_current_ct4 = sqrt(mean_square_current_ct4 - (avg_raw_current_ct4 * avg_raw_current_ct4)) * ct4_scaling_factor
     rms_current_ct5 = sqrt(mean_square_current_ct5 - (avg_raw_current_ct5 * avg_raw_current_ct5)) * ct5_scaling_factor
-    rms_current_ct6 = sqrt(mean_square_current_ct6 - (avg_raw_current_ct6 * avg_raw_current_ct6)) * ct6_scaling_factor
-    rms_voltage_1     = sqrt(mean_square_voltage_1 - (avg_raw_voltage_1 * avg_raw_voltage_1)) * voltage_scaling_factor
-    rms_voltage_2     = sqrt(mean_square_voltage_2 - (avg_raw_voltage_2 * avg_raw_voltage_2)) * voltage_scaling_factor
-    rms_voltage_3     = sqrt(mean_square_voltage_3 - (avg_raw_voltage_3 * avg_raw_voltage_3)) * voltage_scaling_factor
-    rms_voltage_4     = sqrt(mean_square_voltage_4 - (avg_raw_voltage_4 * avg_raw_voltage_4)) * voltage_scaling_factor
-    rms_voltage_5     = sqrt(mean_square_voltage_5 - (avg_raw_voltage_5 * avg_raw_voltage_5)) * voltage_scaling_factor
-    rms_voltage_6     = sqrt(mean_square_voltage_6 - (avg_raw_voltage_6 * avg_raw_voltage_6)) * voltage_scaling_factor
+    rms_voltage_1     = sqrt(mean_square_voltage_1 - (avg_raw_voltage_1 * avg_raw_voltage_1)) * ac_voltage_scaling_factor
+    rms_voltage_2     = sqrt(mean_square_voltage_2 - (avg_raw_voltage_2 * avg_raw_voltage_2)) * ac_voltage_scaling_factor
+    rms_voltage_3     = sqrt(mean_square_voltage_3 - (avg_raw_voltage_3 * avg_raw_voltage_3)) * ac_voltage_scaling_factor
+    rms_voltage_4     = sqrt(mean_square_voltage_4 - (avg_raw_voltage_4 * avg_raw_voltage_4)) * ac_voltage_scaling_factor
+    rms_voltage_5     = sqrt(mean_square_voltage_5 - (avg_raw_voltage_5 * avg_raw_voltage_5)) * ac_voltage_scaling_factor
+    rms_ac_voltage    = sqrt(mean_square_ac_voltage - (avg_raw_ac_voltage * avg_raw_ac_voltage)) * ac_voltage_scaling_factor
+    rms_dc_voltage    = sqrt(mean_square_dc_voltage) * dc_voltage_scaling_factor
 
     # Power Factor
     apparent_power_1 = rms_voltage_1 * rms_current_ct1
@@ -260,8 +256,7 @@ def calculate_power(samples, board_voltage):
     apparent_power_3 = rms_voltage_3 * rms_current_ct3
     apparent_power_4 = rms_voltage_4 * rms_current_ct4
     apparent_power_5 = rms_voltage_5 * rms_current_ct5
-    apparent_power_6 = rms_voltage_6 * rms_current_ct6
-    
+
     try:
         power_factor_1 = real_power_1 / apparent_power_1
     except ZeroDivisionError:
@@ -282,62 +277,52 @@ def calculate_power(samples, board_voltage):
         power_factor_5 = real_power_5 / apparent_power_5
     except ZeroDivisionError:
         power_factor_5 = 0
-    try:
-        power_factor_6 = real_power_6 / apparent_power_6
-    except ZeroDivisionError:
-        power_factor_6 = 0
-    
 
-    
+
+
     results = {
         'ct1' : {
             'type'      : 'consumption',
             'power'     : real_power_1,
             'current'   : rms_current_ct1,
-            'voltage'   : rms_voltage_1,
+            'ac_voltage'   : rms_voltage_1,
             'pf'        : power_factor_1
         },
         'ct2' : {
             'type'      : 'consumption',
             'power'     : real_power_2,
             'current'   : rms_current_ct2,
-            'voltage'   : rms_voltage_2,
-            'pf'        : power_factor_2 
+            'ac_voltage'   : rms_voltage_2,
+            'pf'        : power_factor_2
         },
         'ct3' : {
-            'type'      : 'consumption', 
+            'type'      : 'consumption',
             'power'     : real_power_3,
             'current'   : rms_current_ct3,
-            'voltage'   : rms_voltage_3,
+            'ac_voltage'   : rms_voltage_3,
             'pf'        : power_factor_3
         },
         'ct4' : {
             'type'      : 'consumption',
-            'power'     : real_power_4,         
+            'power'     : real_power_4,
             'current'   : rms_current_ct4,
-            'voltage'   : rms_voltage_4,            
-            'pf'        : power_factor_4            
-        },                                          
-        'ct5' : {                                   
+            'ac_voltage'   : rms_voltage_4,
+            'pf'        : power_factor_4
+        },
+        'ct5' : {
             'type'      : 'consumption',
             'power'     : real_power_5,
             'current'   : rms_current_ct5,
-            'voltage'   : rms_voltage_5,
+            'ac_voltage'   : rms_voltage_5,
             'pf'        : power_factor_5
         },
-        'ct6' : {                                   
-            'type'      : 'consumption',
-            'power'     : real_power_6,
-            'current'   : rms_current_ct6,
-            'voltage'   : rms_voltage_6,
-            'pf'        : power_factor_6
-        },
-        'voltage' : rms_voltage_1,
+        'dc_voltage' : rms_dc_voltage,
+        'ac_voltage' : rms_ac_voltage
     }
 
     return results
 
-def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASECAL_5, PHASECAL_6):
+def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASECAL_5):
 
     # The following empty lists will hold the phase corrected voltage wave that corresponds to each individual CT sensor.
     wave_1 = []
@@ -345,32 +330,29 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
     wave_3 = []
     wave_4 = []
     wave_5 = []
-    wave_6 = []
 
-    voltage_samples = samples['voltage']
+    ac_voltage_samples = samples['ac_voltage']
+    dc_voltage_samples = samples['dc_voltage']
 
-    wave_1.append(voltage_samples[0])
-    wave_2.append(voltage_samples[0])
-    wave_3.append(voltage_samples[0])
-    wave_4.append(voltage_samples[0])
-    wave_5.append(voltage_samples[0])
-    wave_6.append(voltage_samples[0])
-    previous_point = voltage_samples[0]
-    
-    for current_point in voltage_samples[1:]:
+    wave_1.append(ac_voltage_samples[0])
+    wave_2.append(ac_voltage_samples[0])
+    wave_3.append(ac_voltage_samples[0])
+    wave_4.append(ac_voltage_samples[0])
+    wave_5.append(ac_voltage_samples[0])
+    previous_point = ac_voltage_samples[0]
+
+    for current_point in ac_voltage_samples[1:]:
         new_point_1 = previous_point + PHASECAL_1 * (current_point - previous_point)
         new_point_2 = previous_point + PHASECAL_2 * (current_point - previous_point)
         new_point_3 = previous_point + PHASECAL_3 * (current_point - previous_point)
         new_point_4 = previous_point + PHASECAL_4 * (current_point - previous_point)
         new_point_5 = previous_point + PHASECAL_5 * (current_point - previous_point)
-        new_point_6 = previous_point + PHASECAL_6 * (current_point - previous_point)
 
         wave_1.append(new_point_1)
         wave_2.append(new_point_2)
         wave_3.append(new_point_3)
         wave_4.append(new_point_4)
         wave_5.append(new_point_5)
-        wave_6.append(new_point_6)
 
         previous_point = current_point
 
@@ -380,14 +362,13 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
         'v_ct3' : wave_3,
         'v_ct4' : wave_4,
         'v_ct5' : wave_5,
-        'v_ct6' : wave_6,
-        'voltage' : voltage_samples,
+        'ac_voltage' : ac_voltage_samples,
+        'dc_voltage' : dc_voltage_samples,
         'ct1' : samples['ct1'],
         'ct2' : samples['ct2'],
         'ct3' : samples['ct3'],
         'ct4' : samples['ct4'],
         'ct5' : samples['ct5'],
-        'ct6' : samples['ct6'],
     }
 
     return rebuilt_waves
@@ -405,48 +386,45 @@ def run_main():
     ct3_dict = dict(power=[], pf=[], current=[])
     ct4_dict = dict(power=[], pf=[], current=[])
     ct5_dict = dict(power=[], pf=[], current=[])
-    ct6_dict = dict(power=[], pf=[], current=[])
-    rms_voltages = []
+    rms_dc_voltages = []
+    rms_ac_voltages = []
     i = 0   # Counter for aggregate function
-    
-    while True:        
+
+    while True:
         try:
-            board_voltage = get_board_voltage()    
+            board_voltage = get_board_voltage()
             samples = collect_data(2000)
-            poll_time = samples['time']            
+            poll_time = samples['time']
             ct1_samples = samples['ct1']
             ct2_samples = samples['ct2']
             ct3_samples = samples['ct3']
             ct4_samples = samples['ct4']
             ct5_samples = samples['ct5']
-            ct6_samples = samples['ct6']
-            v_samples = samples['voltage']
-            rebuilt_waves = rebuild_waves(samples, ct1_phasecal, ct2_phasecal, ct3_phasecal, ct4_phasecal, ct5_phasecal, ct6_phasecal)
-            results = calculate_power(rebuilt_waves, board_voltage) 
+            dc_v_samples = samples['dc_voltage']
+            ac_v_samples = samples['ac_voltage']
+            rebuilt_waves = rebuild_waves(samples, ct1_phasecal, ct2_phasecal, ct3_phasecal, ct4_phasecal, ct5_phasecal)
+            results = calculate_power(rebuilt_waves, board_voltage)
 
-            # # RMS calculation for phase correction only - this is not needed after everything is tuned. The following code is used to compare the RMS power to the calculated real power. 
+            # # RMS calculation for phase correction only - this is not needed after everything is tuned. The following code is used to compare the RMS power to the calculated real power.
             # # Ideally, you want the RMS power to equal the real power when you are measuring a purely resistive load.
             # rms_power_1 = round(results['ct1']['current'] * results['ct1']['voltage'], 2)  # AKA apparent power
             # rms_power_2 = round(results['ct2']['current'] * results['ct2']['voltage'], 2)  # AKA apparent power
             # rms_power_3 = round(results['ct3']['current'] * results['ct3']['voltage'], 2)  # AKA apparent power
             # rms_power_4 = round(results['ct4']['current'] * results['ct4']['voltage'], 2)  # AKA apparent power
             # rms_power_5 = round(results['ct5']['current'] * results['ct5']['voltage'], 2)  # AKA apparent power
-            # rms_power_6 = round(results['ct6']['current'] * results['ct6']['voltage'], 2)  # AKA apparent power
 
-            # Prepare values for database storage 
+            # Prepare values for database storage
             grid_1_power = results['ct1']['power']    # ct1 Real Power
             grid_2_power = results['ct2']['power']    # ct2 Real Power
             grid_3_power = results['ct3']['power']    # ct3 Real Power
             grid_4_power = results['ct4']['power']    # ct4 Real Power
             grid_5_power = results['ct5']['power']    # ct5 Real Power
-            grid_6_power = results['ct6']['power']    # ct6 Real Power
 
             grid_1_current = results['ct1']['current']  # ct1 Current
             grid_2_current = results['ct2']['current']  # ct2 Current
             grid_3_current = results['ct3']['current']  # ct3 Current
             grid_4_current = results['ct4']['current']  # ct4 Current
             grid_5_current = results['ct5']['current']  # ct5 Current
-            grid_6_current = results['ct6']['current']  # ct6 Current
 
             # If you are monitoring solar/generator inputs to your panel, specify which CT number(s) you are using, and uncomment the commented lines.
             solar_power = 0
@@ -455,14 +433,15 @@ def run_main():
             # solar_power = results['ct4']['power']
             # solar_current = results['ct4']['current']
             # solar_pf = results['ct4']['pf']
-            voltage = results['voltage']
+            ac_voltage = results['ac_voltage']
+            dc_voltage = results['dc_voltage']
 
             # Set solar power and current to zero if the solar power is under 20W.
             if solar_power < 20:
                 solar_power = 0
                 solar_current = 0
                 solar_pf = 0
-            
+
             # Determine if the system is net producing or net consuming right now by looking at the two panel mains.
             # Since the current measured is always positive, we need to add a negative sign to the amperage value if we're exporting power.
             if grid_1_power < 0:
@@ -473,15 +452,15 @@ def run_main():
                 solar_current = solar_current * -1
 
             # Unless your specific panel setup matches mine exactly, the following four lines will likely need to be re-written:
-            home_consumption_power = grid_1_power + grid_2_power + grid_3_power + grid_4_power + grid_5_power + grid_6_power + solar_power
+            home_consumption_power = grid_1_power + grid_2_power + grid_3_power + grid_4_power + grid_5_power + solar_power
             net_power = home_consumption_power - solar_power
-            home_consumption_current = grid_1_current + grid_2_current + grid_3_current + grid_4_current + grid_5_current + grid_6_current - solar_current
-            net_current = grid_1_current + grid_2_current + grid_3_current + grid_4_current + grid_5_current + grid_6_current + solar_current
+            home_consumption_current = grid_1_current + grid_2_current + grid_3_current + grid_4_current + grid_5_current - solar_current
+            net_current = grid_1_current + grid_2_current + grid_3_current + grid_4_current + grid_5_current + solar_current
 
             if net_power < 0:
-                current_status = "Producing"                                
+                current_status = "Producing"
             else:
-                current_status = "Consuming"                
+                current_status = "Consuming"
 
             # Average 2 readings before sending to db
             if i < 2:
@@ -493,7 +472,7 @@ def run_main():
                 home_load_values['current'].append(home_consumption_current)
                 net_power_values['power'].append(net_power)
                 net_power_values['current'].append(net_current)
-                
+
                 ct1_dict['power'].append(results['ct1']['power'])
                 ct1_dict['current'].append(results['ct1']['current'])
                 ct1_dict['pf'].append(results['ct1']['pf'])
@@ -509,27 +488,25 @@ def run_main():
                 ct5_dict['power'].append(results['ct5']['power'])
                 ct5_dict['current'].append(results['ct5']['current'])
                 ct5_dict['pf'].append(results['ct5']['pf'])
-                ct6_dict['power'].append(results['ct6']['power'])
-                ct6_dict['current'].append(results['ct6']['current'])
-                ct6_dict['pf'].append(results['ct6']['pf'])
-                rms_voltages.append(voltage)
+                rms_dc_voltages.append(dc_voltage)
+                rms_ac_voltages.append(ac_voltage)
                 i += 1
-            
-            
+
+
             else:   # Calculate the average, send the result to InfluxDB, and reset the dictionaries for the next 2 sets of data.
                 infl.write_to_influx(
                     solar_power_values,
                     home_load_values,
-                    net_power_values, 
+                    net_power_values,
                     ct1_dict,
                     ct2_dict,
                     ct3_dict,
                     ct4_dict,
                     ct5_dict,
-                    ct6_dict,
                     poll_time,
                     i,
-                    rms_voltages,
+                    rms_ac_voltages,
+                    rms_dc_voltages
                     )
                 solar_power_values = dict(power=[], pf=[], current=[])
                 home_load_values = dict(power=[], pf=[], current=[])
@@ -539,16 +516,17 @@ def run_main():
                 ct3_dict = dict(power=[], pf=[], current=[])
                 ct4_dict = dict(power=[], pf=[], current=[])
                 ct5_dict = dict(power=[], pf=[], current=[])
-                ct6_dict = dict(power=[], pf=[], current=[])
-                rms_voltages = []
+                rms_ac_voltages = []
+                rms_dc_voltages = []
                 i = 0
 
                 if logger.handlers[0].level == 10:
-                    t = PrettyTable(['', 'ct1', 'ct2', 'ct3', 'ct4', 'ct5', 'ct6'])
-                    t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3), round(results['ct6']['power'], 3)])
-                    t.add_row(['Current', round(results['ct1']['current'], 3), round(results['ct2']['current'], 3), round(results['ct3']['current'], 3), round(results['ct4']['current'], 3), round(results['ct5']['current'], 3), round(results['ct6']['current'], 3)])
-                    t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3), round(results['ct6']['pf'], 3)])
-                    t.add_row(['Voltage', round(results['voltage'], 3), '', '', '', '', ''])
+                    t = PrettyTable(['', 'ct1', 'ct2', 'ct3', 'ct4', 'ct5'])
+                    t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3)])
+                    t.add_row(['Current', round(results['ct1']['current'], 3), round(results['ct2']['current'], 3), round(results['ct3']['current'], 3), round(results['ct4']['current'], 3), round(results['ct5']['current'], 3)])
+                    t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3)])
+                    t.add_row(['AC Voltage', round(results['ac_voltage'], 3), '', '', '', ''])
+                    t.add_row(['DC Voltage', round(results['dc_voltage'], 3), '', '', '', ''])
                     s = t.get_string()
                     logger.debug('\n' + s)
 
@@ -559,11 +537,12 @@ def run_main():
             sys.exit()
 
 def print_results(results):
-    t = PrettyTable(['', 'ct1', 'ct2', 'ct3', 'ct4', 'ct5', 'ct6'])
-    t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3), round(results['ct6']['power'], 3)])
-    t.add_row(['Current', round(results['ct1']['current'], 3), round(results['ct2']['current'], 3), round(results['ct3']['current'], 3), round(results['ct4']['current'], 3), round(results['ct5']['current'], 3), round(results['ct6']['current'], 3)])
-    t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3), round(results['ct6']['pf'], 3)])
-    t.add_row(['Voltage', round(results['voltage'], 3), '', '', '', '', ''])
+    t = PrettyTable(['', 'ct1', 'ct2', 'ct3', 'ct4', 'ct5'])
+    t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3)])
+    t.add_row(['Current', round(results['ct1']['current'], 3), round(results['ct2']['current'], 3), round(results['ct3']['current'], 3), round(results['ct4']['current'], 3), round(results['ct5']['current'], 3)])
+    t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3)])
+    t.add_row(['AC Voltage', round(results['ac_voltage'], 3), '', '', '', ''])
+    t.add_row(['DC Voltage', round(results['dc_voltage'], 3), '', '', '', ''])
     s = t.get_string()
     logger.debug(s)
 
@@ -589,7 +568,7 @@ if __name__ == '__main__':
         copyfile('config.py', 'config.py.backup')
     except FileNotFoundError:
         logger.info("Could not create a backup of config.py file.")
-    
+
     if len(sys.argv) > 1:
         MODE = sys.argv[1]
         if MODE == 'debug' or MODE == 'phase':
@@ -623,7 +602,7 @@ if __name__ == '__main__':
                 if recover_influx_container():
                     infl.init_db()
                     run_main()
-        
+
             else:
                 logger.info(f"Could not connect to your remote database at {db_settings['host']}:{db_settings['port']}. Please verify connectivity/credentials and try again.")
                 sys.exit()
@@ -634,14 +613,14 @@ if __name__ == '__main__':
     else:
         # Program launched in one of the non-main modes. Increase logging level.
         logger.setLevel(logging.DEBUG)
-        logger.handlers[0].setLevel(logging.DEBUG)      
+        logger.handlers[0].setLevel(logging.DEBUG)
         if 'help' in MODE.lower() or '-h' in MODE.lower():
 
             logger.info("See the project Wiki for more detailed usage instructions: https://github.com/David00/rpi-power-monitor/wiki")
             logger.info(dedent("""Usage:
                 Start the program:                                  python3 power-monitor.py
 
-                Collect raw data and build an interactive plot:     python3 power-monitor.py debug "chart title here" 
+                Collect raw data and build an interactive plot:     python3 power-monitor.py debug "chart title here"
 
                 Launch interactive phase correction mode:           python3 power-monitor.py phase
 
@@ -661,7 +640,7 @@ if __name__ == '__main__':
 
             # Calculate Sample Rate in Kilo-Samples Per Second.
             sample_count = sum([ len(samples[x]) for x in samples.keys() if type(samples[x]) == list ])
-            
+
             sample_rate = round((sample_count / duration) / 1000, 2)
 
             logger.debug(f"Finished Collecting Samples. Sample Rate: {sample_rate} KSPS")
@@ -670,8 +649,8 @@ if __name__ == '__main__':
             ct3_samples = samples['ct3']
             ct4_samples = samples['ct4']
             ct5_samples = samples['ct5']
-            ct6_samples = samples['ct6']
-            v_samples = samples['voltage']
+            ac_v_samples = samples['ac_voltage']
+            dc_v_samples = samples['dc_voltage']
 
             # Save samples to disk
             with open('data/samples/last-debug.pkl', 'wb') as f:
@@ -679,7 +658,7 @@ if __name__ == '__main__':
 
             if not title:
                 title = input("Enter the title for this chart: ")
-            
+
             title = title.replace(" ","_")
             logger.debug("Building plot.")
             plot_data(samples, title, sample_rate=sample_rate)
@@ -695,17 +674,17 @@ if __name__ == '__main__':
             PF_ROUNDING_DIGITS = 3      # This variable controls how many decimal places the PF will be rounded
 
             while True:
-                try:    
-                    ct_num = int(input("\nWhich CT number are you calibrating? Enter the number of the CT label [0 - 5]: "))
-                    if ct_num not in range(0, 6):
-                        logger.error("Please choose from CT numbers 0, 1, 2, 3, 4, or 5.")
+                try:
+                    ct_num = int(input("\nWhich CT number are you calibrating? Enter the number of the CT label [1 - 5]: "))
+                    if ct_num not in range(1, 6):
+                        logger.error("Please choose from CT numbers 1, 2, 3, 4, or 5.")
                     else:
                         ct_selection = f'ct{ct_num}'
                         break
                 except ValueError:
-                    logger.error("Please enter an integer! Acceptable choices are: 0, 1, 2, 3, 4, 5.")
+                    logger.error("Please enter an integer! Acceptable choices are: 1, 2, 3, 4, 5.")
 
-            
+
             cont = input(dedent(f"""
                 #------------------------------------------------------------------------------#
                 # IMPORTANT: Make sure that current transformer {ct_selection} is installed over          #
@@ -714,20 +693,20 @@ if __name__ == '__main__':
                 #------------------------------------------------------------------------------#
 
                 Continue? [y/yes/n/no]: """))
-                
+
 
             if cont.lower() in ['n', 'no']:
                 logger.info("\nCalibration Aborted.\n")
                 sys.exit()
 
             samples = collect_data(2000)
-            rebuilt_wave = rebuild_wave(samples[ct_selection], samples['voltage'], ct_phase_correction[ct_selection])
+            rebuilt_wave = rebuild_wave(samples[ct_selection], samples['ac_voltage'], ct_phase_correction[ct_selection])
             board_voltage = get_board_voltage()
             results = check_phasecal(rebuilt_wave['ct'], rebuilt_wave['new_v'], board_voltage)
 
             # Get the current power factor and check to make sure it is not negative. If it is, the CT is installed opposite to how it should be.
             pf = results['pf']
-            initial_pf = pf  
+            initial_pf = pf
             if pf < 0:
                 logger.info(dedent('''
                     Current transformer is installed backwards. Please reverse the direction that it is attached to your load. \n
@@ -736,7 +715,7 @@ if __name__ == '__main__':
                 input("[ENTER]")
                 # Check to make sure the CT was reversed properly by taking another batch of samples/calculations:
                 samples = collect_data(2000)
-                rebuilt_wave = rebuild_wave(samples[ct_selection], samples['voltage'], 1)
+                rebuilt_wave = rebuild_wave(samples[ct_selection], samples['ac_voltage'], 1)
                 board_voltage = get_board_voltage()
                 results = check_phasecal(rebuilt_wave['ct'], rebuilt_wave['new_v'], board_voltage)
                 pf = results['pf']
@@ -758,7 +737,7 @@ if __name__ == '__main__':
             logger.info("Please wait... building HTML plot...")
             # Get new set of samples using recommended phasecal value
             samples = collect_data(2000)
-            rebuilt_wave = rebuild_wave(samples[ct_selection], samples['voltage'], avg_phasecal)
+            rebuilt_wave = rebuild_wave(samples[ct_selection], samples['ac_voltage'], avg_phasecal)
 
             report_title = f'CT{ct_num}-phase-correction-result'
             plot_data(rebuilt_wave, report_title, ct_selection)
@@ -768,18 +747,17 @@ if __name__ == '__main__':
             # This mode will read the sensors, perform the calculations, and print the wattage, current, power factor, and voltage to the terminal.
             # Data is stored to the database in this mode!
             logger.debug("... Starting program in terminal mode")
-            
+
             connection_established = infl.init_db()
-            
+
             if not connection_established:
                 # Check to see if the user's DB configuration points to this Pi:
                 if db_settings['host'] == 'localhost' or '127.0' in db_settings['host'] or get_ip() in db_settings['host']:
                     recover_influx_container()
-                
+
                 else:
                     logger.info("Could not connect to your remote database. Please verify this Pi can connect to your database and then try running the software again.")
                     sys.exit()
-            
-            
-            run_main()
 
+
+            run_main()
