@@ -84,7 +84,7 @@ def calculate_power(samples, board_voltage):
     ct5_samples = samples['ct5']        # current samples for ct5
     v_samples_1 = samples['v_ct1']      # phase-corrected voltage wave specifically for ct1
     v_samples_2 = samples['v_ct2']      # phase-corrected voltage wave specifically for ct2
-    v_samples_3 = samples['v_ct3']      # phase-corrected voltage wave specifically for ct3
+    v_samples_3 = samples['dc_voltage']      # use DC voltage for ct3
     v_samples_4 = samples['v_ct4']      # phase-corrected voltage wave specifically for ct4
     v_samples_5 = samples['v_ct5']      # phase-corrected voltage wave specifically for ct5
     ac_v_samples = samples['ac_voltage']
