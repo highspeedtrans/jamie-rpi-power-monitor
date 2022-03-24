@@ -219,7 +219,7 @@ def calculate_power(samples, board_voltage):
 
     real_power_1 = ((sum_inst_power_ct1 / num_samples) - (avg_raw_current_ct1 * avg_raw_voltage_1))  * ct1_scaling_factor * ac_voltage_scaling_factor
     real_power_2 = ((sum_inst_power_ct2 / num_samples) - (avg_raw_current_ct2 * avg_raw_voltage_2))  * ct2_scaling_factor * ac_voltage_scaling_factor
-    real_power_3 = ((sum_inst_power_ct3 / num_samples) - (avg_raw_current_ct3 * avg_raw_voltage_3))  * ct3_scaling_factor * ac_voltage_scaling_factor
+    real_power_3 = (sum_inst_power_ct3 / num_samples) * ct3_scaling_factor * dc_voltage_scaling_factor
     real_power_4 = ((sum_inst_power_ct4 / num_samples) - (avg_raw_current_ct4 * avg_raw_voltage_4))  * ct4_scaling_factor * ac_voltage_scaling_factor
     real_power_5 = ((sum_inst_power_ct5 / num_samples) - (avg_raw_current_ct5 * avg_raw_voltage_5))  * ct5_scaling_factor * ac_voltage_scaling_factor
 
@@ -238,12 +238,12 @@ def calculate_power(samples, board_voltage):
 
     rms_current_ct1 = sqrt(mean_square_current_ct1 - (avg_raw_current_ct1 * avg_raw_current_ct1)) * ct1_scaling_factor
     rms_current_ct2 = sqrt(mean_square_current_ct2 - (avg_raw_current_ct2 * avg_raw_current_ct2)) * ct2_scaling_factor
-    rms_current_ct3 = sqrt(mean_square_current_ct3 - (avg_raw_current_ct3 * avg_raw_current_ct3)) * ct3_scaling_factor
+    rms_current_ct3 = sqrt(mean_square_current_ct3) * ct3_scaling_factor
     rms_current_ct4 = sqrt(mean_square_current_ct4 - (avg_raw_current_ct4 * avg_raw_current_ct4)) * ct4_scaling_factor
     rms_current_ct5 = sqrt(mean_square_current_ct5 - (avg_raw_current_ct5 * avg_raw_current_ct5)) * ct5_scaling_factor
     rms_voltage_1     = sqrt(mean_square_voltage_1 - (avg_raw_voltage_1 * avg_raw_voltage_1)) * ac_voltage_scaling_factor
     rms_voltage_2     = sqrt(mean_square_voltage_2 - (avg_raw_voltage_2 * avg_raw_voltage_2)) * ac_voltage_scaling_factor
-    rms_voltage_3     = sqrt(mean_square_voltage_3 - (avg_raw_voltage_3 * avg_raw_voltage_3)) * ac_voltage_scaling_factor
+    rms_voltage_3     = sqrt(mean_square_voltage_3) * dc_voltage_scaling_factor
     rms_voltage_4     = sqrt(mean_square_voltage_4 - (avg_raw_voltage_4 * avg_raw_voltage_4)) * ac_voltage_scaling_factor
     rms_voltage_5     = sqrt(mean_square_voltage_5 - (avg_raw_voltage_5 * avg_raw_voltage_5)) * ac_voltage_scaling_factor
     rms_ac_voltage    = sqrt(mean_square_ac_voltage - (avg_raw_ac_voltage * avg_raw_ac_voltage)) * ac_voltage_scaling_factor
@@ -335,12 +335,12 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
 
     wave_1.append(ac_voltage_samples[0])
     wave_2.append(ac_voltage_samples[0])
-    wave_3.append(ac_voltage_samples[0])
+    wave_3.append(dc_voltage_samples[0])
     wave_4.append(ac_voltage_samples[0])
     wave_5.append(ac_voltage_samples[0])
     previous_point = ac_voltage_samples[0]
 
-    for current_point in ac_voltage_samples[1:]:
+    for current_point in ac_voltage_samples[1:] and dc_voltage_samples[1:]:
         new_point_1 = previous_point + PHASECAL_1 * (current_point - previous_point)
         new_point_2 = previous_point + PHASECAL_2 * (current_point - previous_point)
         new_point_3 = previous_point + PHASECAL_3 * (current_point - previous_point)
@@ -357,12 +357,12 @@ def rebuild_waves(samples, PHASECAL_1, PHASECAL_2, PHASECAL_3, PHASECAL_4, PHASE
 
     rebuilt_waves = {
         'v_ct1' : wave_1,
+        'ac_voltage' : ac_voltage_samples,
         'v_ct2' : wave_2,
         'v_ct3' : wave_3,
+        'dc_voltage' : dc_voltage_samples,
         'v_ct4' : wave_4,
         'v_ct5' : wave_5,
-        'ac_voltage' : ac_voltage_samples,
-        'dc_voltage' : dc_voltage_samples,
         'ct1' : samples['ct1'],
         'ct2' : samples['ct2'],
         'ct3' : samples['ct3'],
@@ -521,9 +521,9 @@ def run_main():
 
                 if logger.handlers[0].level == 10:
                     t = PrettyTable(['', 'ct1', 'ct2', 'ct3', 'ct4', 'ct5'])
-                    t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3)])
+                    #t.add_row(['Watts', round(results['ct1']['power'], 3), round(results['ct2']['power'], 3), round(results['ct3']['power'], 3), round(results['ct4']['power'], 3), round(results['ct5']['power'], 3)])
                     t.add_row(['Current', round(results['ct1']['current'], 3), round(results['ct2']['current'], 3), round(results['ct3']['current'], 3), round(results['ct4']['current'], 3), round(results['ct5']['current'], 3)])
-                    t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3)])
+                    #t.add_row(['P.F.', round(results['ct1']['pf'], 3), round(results['ct2']['pf'], 3), round(results['ct3']['pf'], 3), round(results['ct4']['pf'], 3), round(results['ct5']['pf'], 3)])
                     t.add_row(['AC Voltage', round(results['ac_voltage'], 3), '', '', '', ''])
                     t.add_row(['DC Voltage', round(results['dc_voltage'], 3), '', '', '', ''])
                     s = t.get_string()
