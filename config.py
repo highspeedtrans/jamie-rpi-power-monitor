@@ -51,9 +51,9 @@ ct_phase_correction = {
 accuracy_calibration = {
     'ct1' : 1,
     'ct2' : 1,
-    'ct3' : 1,
+    'ct3' : .2,
     'ct4' : 1,
     'ct5' : 1,
-    'DC' : 1,
-    'AC'  : 1,
+    'DC' : 1.0046,
+    'AC' : 1,
 }

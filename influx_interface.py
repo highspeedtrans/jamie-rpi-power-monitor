@@ -202,8 +202,9 @@ def write_to_influx(solar_power_values, home_load_values, net_power_values, ct1_
     ct3 = Point('ct', power=ct3_avg_power, current=ct3_avg_current, pf=ct3_avg_pf, time=poll_time, num=3)
     ct4 = Point('ct', power=ct4_avg_power, current=ct4_avg_current, pf=ct4_avg_pf, time=poll_time, num=4)
     ct5 = Point('ct', power=ct5_avg_power, current=ct5_avg_current, pf=ct5_avg_pf, time=poll_time, num=5)
-    dc_v = Point('voltage', voltage=avg_dc_voltage, v_input=1, time=poll_time)
-    ac_v = Point('voltage', voltage=avg_ac_voltage, v_input=0, time=poll_time)
+    ac_v = Point('voltage', voltage=avg_ac_voltage, v_input=1, time=poll_time)
+    dc_v = Point('voltage', voltage=avg_dc_voltage, v_input=3, time=poll_time)
+    
 
     points = [
         home_load.to_dict(),
